@@ -1,0 +1,73 @@
+---
+title: "Go No Go Results"
+format: html
+editor: visual
+---
+
+Set up
+
+```{r}
+#| echo: false
+# provide a quarto based report of the oc results
+# that has a nicely formatted table using the GT packageand a figure with
+# the figure as a line plot with RR as the x axis
+# and the y axis as the probability of go, no go, pause
+# use a green line for go, red for no go, orange for pause
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(gt)
+library(scales)
+library(targets)
+
+oc <- tar_read(oc)
+oc %>%
+  arrange(N, rr) %>%
+  gt() %>%
+  tab_header(
+    title = "Operating Characteristics",
+    subtitle = "Probability of Go, No Go, Pause by Sample Size and Relative Risk"
+  ) %>%
+  fmt_percent(
+    columns = vars(prop_go, prop_no_go, prop_pause),
+    decimals = 1
+  ) %>%
+  cols_label(
+    N = "Sample Size",
+    rr = "Relative Risk",
+    prop_go = "Prob Go",
+    prop_no_go = "Prob No Go",
+    prop_pause = "Prob Pause"
+  ) %>%
+  tab_options(
+    table.font.names = "Arial",
+    table.font.size = px(12),
+    table.width = pct(80)
+  ) 
+# plot the results  
+# create a seperate plot for each sample size
+
+ggplot(oc, aes(x = rr)) +
+  geom_line(aes(y = prop_go, color = "Go"), linewidth = 1) +
+  geom_line(aes(y = prop_no_go, color = "No Go"), linewidth = 1) +
+  geom_line(aes(y = prop_pause, color = "Pause"), linewidth = 1) +
+  scale_color_manual(values = c("Go" = "green", "No Go" = "red", "Pause" = "orange")) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0,1)) +
+  labs(
+    title = "Operating Characteristics by Relative Risk",
+    x = "Relative Risk (RR)",
+    y = "Probability",
+    color = "Decision"
+  ) +
+  facet_wrap(~ N, ncol = 2) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    strip.text = element_text(size = 12)
+  ) 
+
+
+```

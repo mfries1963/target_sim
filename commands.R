@@ -14,7 +14,12 @@ tar_validate()
 tar_make()
 
 tar_objects()
-tar_read(model_data_batch_0.4_120)
-tar_read(model_data_data_0.4_120_10a60e6fbbeb4eb3)
-
+tar_read(model_data_reg_1_220_3_2_0.3_0.8_0.6_1_1_fcc806ba6f4d123c)
+tar_read(model_data_reg_1_220_f4d8eff9753f25db)
+tar_read(mapped_models)
+names(mapped_models)
 ## next steps: how to compile these results into a figure?
+x <- tar_read(model_results)
+head(x)
+x$.dataset_id
+tar_read(oc)

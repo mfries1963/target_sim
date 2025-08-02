@@ -1,69 +1,47 @@
-# _targets.R file
-
-
-#loading target verse
 library(targets)
-library(tarchetypes)
 library(stantargets)
-
-# other packages
+library(rstan) 
+library(tarchetypes)
+library(tibble)
 library(tidyverse)
-library(quarto)
 
-# set up the Stan model code
-# need to rewrite for negative binomial ###################################
+source("R/functions.R")
 
-lines <-"data {
-  int<lower=0> N;          // Number of observations
-  array[N] int<lower=0> y; // Response variable (count data)
-  array[N] int<lower=0,upper=1> trt; // Treatment indicator (0=placebo, 1=drug)
-}
-parameters {
-  real alpha;          // Intercept
-  real beta_trt;      // Coefficient for treatment effect
-  real<lower=0> phi;   // Negative binomial dispersion parameter
-}
-
-model {
-  // Priors
-  alpha ~ normal(0, 5);          // Weakly informative prior for intercept
-  beta_trt ~ normal(0, 2);       // Weakly informative prior for treatment effect
-  phi ~ cauchy(0, 3);          // Weakly informative prior for dispersion parameter
-
-  // Likelihood
-  for (n in 1:N) {
-    y[n] ~ neg_binomial_2_log(alpha + beta_trt * trt[n], phi); 
-  }
-}
-"
-writeLines(lines, "reg.stan")
-
-# setting up the pipeline
-tar_source() # loads any functions from /R/functions.R
-# such as gen_stan_code, gen_assumptions, gen_scenarios, simulate and report
-
-tar_option_set(packages = c("readr", "dplyr", "ggplot2"))
-
-list(
-  tar_map(
-    values <- gen_scenarios(), # this creates a list of parameters for sim_dat
-    tar_stan_mcmc_rep_draws(
-      model_data,
-      "reg.stan",
-      data = sim_dat(
-        rr = rr,
-        ss_treatment = ss_treatment,
-        mu_placebo = 3,
-        dispersion_placebo = 2,
-        randomization_ratio = 1), # Runs once per rep.
-      batches = 4, # Number of branch targets.
-      reps = 2, # Number of model reps per branch target.
-      # batches and reps are per scenario. They should be large.
-      variables = "beta_trt",
-      memory = "persistent", # this seems necessary to stan to work with tar_map
-      stdout = R.utils::nullfile(),
-      stderr = R.utils::nullfile(),
-      transform = gonogo
-    )
+mapped_models <- tar_map(
+  values <- gen_scenarios(), 
+  tar_stan_mcmc_rep_draws(model_data, 
+                          "reg.stan", 
+                          data = sim_dat(
+                            rr = rr, 
+                            ss_treatment = ss_treatment, 
+                            mu_placebo = 3, 
+                            dispersion_placebo = 2, 
+                            randomization_ratio = 1), 
+                          batches = 4, 
+                          reps = 2, 
+                          variables = "beta_trt", 
+                          memory = "persistent", 
+                          stdout = R.utils::nullfile(), 
+                          stderr = R.utils::nullfile(),
+                          transform = gonogo)
   )
+# extract simulation results with group variables (in this example, N and rr)
+results1 <- tar_combine(model_results, mapped_models$model_data_reg, command = dplyr::bind_rows(!!!.x))
+# create a new target that summarizes for each value of N and rr, the proportion of "go", "no go", and "pause" based on the variable decision
+calc_oc <- tar_target(
+  name = oc,
+  command = oc_rates(model_results)
 )
+# provide a quarto based report of the oc results
+# that has a nicely formatted table and a figure with
+# the figure as a line plot with RR as the x axis
+# and the y axis as the probability of go, no go, pause
+# use a green line for go, red for no go, orange for pause
+report <- tar_quarto(
+  name = oc_report,
+  quiet = FALSE,
+  path = "/home/mike/R_projects/target_sim/oc_report.qmd"
+)
+ 
+
+list(mapped_models, results1, calc_oc)

@@ -105,10 +105,23 @@ gonogo <- function(data, draws) {
     randomization_ratio = assumptions$randomization_ratio,
     prob_lrv = prob_lrv,
     prob_tv = prob_tv,
-    decision = decision)
+    decision = decision,
+    rr = data$.join_data$rr,
+    N = data$.join_data$N)
   
 }
 
+
+oc_rates <- function(data) {
+  data %>%
+  group_by(N, rr) %>%
+  summarize(
+    n = n(),
+    prop_go = mean(decision == "go"),
+    prop_no_go = mean(decision == "no go"),
+    prop_pause = mean(decision == "pause")
+  )
+}
 # testing, works
 # draws <- fit$draws(format = "draws_df")
 # gonogo(test_dat, draws)
