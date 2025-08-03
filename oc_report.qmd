@@ -1,12 +1,12 @@
 ---
-title: "Go No Go Results"
-format: html
+title: "Statistical Considerations for the Study Design of a Phase 2 Clinical Trial CSL123_2001"
+format: pdf
 editor: visual
 ---
 
-Set up
 
-```{r}
+
+```{r setup, include=FALSE}
 #| echo: false
 # provide a quarto based report of the oc results
 # that has a nicely formatted table using the GT packageand a figure with
@@ -21,6 +21,156 @@ library(scales)
 library(targets)
 
 oc <- tar_read(oc)
+```
+
+## Introduction
+
+We present an  exploration of  the statistical operating characteristics of a phase 2 clinical trial in Sickle Cell Disease.  The primary endpoint of the trial is the number of Vascular Occlusive Crisis (VOC) events pear year.  There is expected to be two arms, and we want to establish early signs of clinical efficacy.  
+
+The goal is to determine an study design and planned analysis that will provide a high probability of correctly identifying a treatment that is clinically effective, while controlling the risk of incorrectly advancing an ineffective treatment.  We also want to explore the impact of sample size and the true underlying relative risk on the operating characteristics of the design. The robustness of the design to various assumptions will also be explored.
+
+Due to the long duration of the endpoint and the relatively short duration of the trial, we will not explore adaptive designs or interim analyses in this report, but these could be explored in future work.
+
+## Description of the models
+
+The primary endpoint is the number of VOC events per year, which is a count variable.  We will model the number of events using a negative binomial regression model, which allows for overdispersion relative to a Poisson model.  The model will include a treatment indicator as a covariate, and we will use Bayesian methods to estimate the posterior distribution of the treatment effect.
+
+The model is specified as follows:
+
+$$ Y_i \sim \text{Negative Binomial}(\mu_i, \phi) $$
+
+$$ \log(\mu_i) = \beta_0 + \beta_{trt} \cdot X_i $$
+$$ \beta_0 \sim \text{Normal}(0, 10) $$
+$$ \beta_{trt} \sim \text{Normal}(0, 10) $$
+
+where $Y_i$ is the number of VOC events for subject $i$, $\mu_i$ is the mean number of events, $\phi$ is the dispersion parameter, $X_i$ is the treatment indicator (0 for placebo, 1 for treatment), $\beta_0$ is the intercept, and $\beta_{trt}$ is the treatment effect on the log scale.
+We will use the weakly informative priors for the model parameters as specified to allow the data to drive the inference.
+
+## Decision Rules
+The decision to "Go", "No Go", or "Pause" will be based on the posterior distribution of the treatment effect.  Specifically, we will compute the posterior probabilities that the treatment effect exceeds certain thresholds:
+- Target Effect (TV): A clinically meaningful reduction in VOC rate, defined as a relative risk (RR) of 0.5 or lower.
+- Lower Reference Value (LRV): A smaller reduction in VOC rate, defined as a relative risk of 1 or lower.
+The decision rules are as follows:
+
+
+| Decision | Criteria |
+|----------|----------|
+| Go       | $P(RR < TV) > 0.3$ and $P(RR < LRV) > 0.8$ |
+| Pause    | $P(RR < TV) > 0.3$ and $P(RR < LRV) \leq 0.8$ |
+| No Go    | $P(RR < TV) \leq 0.3$ |
+
+Where \(P(RR < TV)\) is the posterior probability that the relative risk is less than the target effect, and \(P(RR < LRV)\) is the posterior probability that the relative risk is less than the lower reference value.
+
+This can be illustrated via two-one-sided credible intervals, where the upper interval represents 20% probability to the right of it, and the lower interval represents 30% probability to the left of it.  If the end of the upper interval is below the LRV, and the end of the lower credible interval is below the TV, we have a "Go".  If the end of the lower interval is above the TV, we have a "No Go".  If the ends of the intervals extend over both the LRV and the TV, we have a "Pause".
+
+Each potential case is illustrated in the figure below
+
+```{r decision_rules, echo=FALSE}
+# create a figure that illustrates the decision rules
+# we see credible intervals plotted horizontally with the "go" green, "pause" orange, and "no go" red
+# with the LRV and TV marked with vertical lines to illustrate the decision rules
+library(ggplot2)
+decision_data <- tibble(
+  decision = c("Go", "Pause", "No Go 1", "No Go 2"),
+  lower = c(0.3, 0.3, 0.6, 0.6),
+  upper = c(0.6, 1.2, 1.5, 0.9)
+)
+decision_data$decision <- factor(decision_data$decision, levels = c("Go", "Pause", "No Go 1", "No Go 2"))
+ggplot(decision_data, aes(y = decision)) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper, color = decision), height = 0.2, size = 1.5) +
+  geom_vline(xintercept = 1.0, linetype = "dashed", color = "blue") + # LRV
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "red") + # TV
+  annotate("text", x = 0.5, y = 3.5, label = "TV (0.3)", color = "red", angle = 90, vjust = -0.5) +
+  annotate("text", x = 1.0, y = 3.5, label = "LRV (0.6)", color = "blue", angle = 90, vjust = -0.5) +
+  scale_color_manual(values = c("Go" = "green", "Pause" = "orange", "No Go 1" = "red", "No Go 2" = "red")) +
+  labs(
+    title = "Decision Rules Based on Posterior Credible Intervals",
+    x = "Relative Risk (RR)",
+    y = "Decision"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14)
+  )
+
+```
+
+
+
+```
+
+## Assumptions
+
+The following assumptions were made in the design of the trial:
+
+### Assumptions Table
+
+```{r assumptions, echo=FALSE}
+
+assumptions <- tibble(
+  Parameter = c(
+  "Mean VOC rate in placebo", 
+  "Dispersion parameter", 
+  "Target effect (TV)", 
+  "Lower reference value (LRV)", 
+  "Probability threshold for TV", 
+  "Probability threshold for LRV", 
+  "Randomization ratio"),
+  Value = c(3, 2, 0.5, 1.0, 0.3, 0.8, 1)
+)
+
+gt_tbl <- assumptions %>%
+  gt() %>%
+  tab_header(
+    title = "Assumptions for the Simulation",
+    subtitle = "Key parameters used in the simulation design"
+  ) %>%
+  cols_label(
+    Parameter = "Parameter",
+    Value = "Value"
+  ) %>%
+  tab_options(
+    table.font.names = "Arial",
+    table.font.size = px(12),
+    table.width = pct(80)
+  )
+
+# this is a workaround for using gt tables in quarto pdf output
+# it's not working well directly
+latex_table_code <- as_latex(gt_tbl)
+
+```
+
+```{r latex_table, results='asis', echo=FALSE}
+print(latex_table_code)
+```
+
+## Scenario Design
+### Treatment Effect
+### Influence of Nuisance Parameters
+### Estimands and missing data
+
+## Assumptions
+### Assumptions Table
+
+## What Will Be Assessed
+### Power and Sample Size
+### Decision Rules
+### Coverage
+### Bias
+### Precision
+### Calibration of Decision Rules
+### Minimal Detectable Difference
+
+## Scenarios Explored
+### Scenarios Table
+
+
+
+```{r table, echo=FALSE}
 oc %>%
   arrange(N, rr) %>%
   gt() %>%
@@ -44,6 +194,10 @@ oc %>%
     table.font.size = px(12),
     table.width = pct(80)
   ) 
+```
+
+
+```{r plot, echo=FALSE, message=FALSE}
 # plot the results  
 # create a seperate plot for each sample size
 
@@ -69,5 +223,43 @@ ggplot(oc, aes(x = rr)) +
     strip.text = element_text(size = 12)
   ) 
 
-
 ```
+
+Sections that must be added
++  decision rule table
++  assumptions table
++  description of the model
++  description of the decision rules
++  description of the results
++  minimal detectable difference
++  influence of nuisance parameters
++  influence of estimands and missing data
+
+
+Other sections that might be useful:
+
+
++  description of the simulation design
++  influence of decision thresholds
++  exploring interim analysis and adaptive designs
++  exploring futility stopping
++  exploring sample size re-estimation
++  exploring multiple endpoints
++  exploring subgroup analyses
++  exploring covariate adjustment
++  exploring different models (e.g., time to event, binary, continuous)
++  exploring different priors
++  coverage properties
++  bias properties
++  precision properties
++  calibration of decision rules
++  sensitivity analyses
++  robustness analyses
++  limitations
++  the impact of recruitment
++  including of external data (real world, publication, synthetic)
++  Power and sample size
++  Bayesian assurance
++  References
++  inclusions
+
